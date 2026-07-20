@@ -93,6 +93,21 @@ async def _generate_screenshot_for_scene(
 class VideoContentAnalyzer:
     """Analyzes video content to provide scene boundaries and visual insights"""
     
+    @staticmethod
+    def _load_cascade(filename: str):
+        """Load Haar cascade if OpenCV object detection is available."""
+        try:
+            cascade_cls = getattr(cv2, "CascadeClassifier", None)
+            haarcascades = getattr(getattr(cv2, "data", None), "haarcascades", None)
+            if cascade_cls is None or haarcascades is None:
+                return None
+            classifier = cascade_cls(haarcascades + filename)
+            if hasattr(classifier, "empty") and classifier.empty():
+                return None
+            return classifier
+        except Exception:
+            return None
+    
     def __init__(self):
         self.metadata_dir = Path("/tmp/music/metadata")
         self.metadata_dir.mkdir(parents=True, exist_ok=True)
@@ -101,9 +116,9 @@ class VideoContentAnalyzer:
         self.screenshots_dir = SecurityConfig.SCREENSHOTS_DIR
         self.screenshots_dir.mkdir(parents=True, exist_ok=True)
         
-        # Initialize OpenCV object detectors
-        self.face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
-        self.eye_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_eye.xml')
+        # Initialize OpenCV object detectors when supported by the runtime
+        self.face_cascade = self._load_cascade('haarcascade_frontalface_default.xml')
+        self.eye_cascade = self._load_cascade('haarcascade_eye.xml')
         
     def _get_metadata_path(self, file_id: str) -> Path:
         """Get metadata file path for a video file"""
@@ -353,14 +368,16 @@ class VideoContentAnalyzer:
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         
         # Detect faces
-        faces = self.face_cascade.detectMultiScale(gray, 1.1, 4)
-        if len(faces) > 0:
-            objects.append(f"faces ({len(faces)})")
+        if self.face_cascade is not None:
+            faces = self.face_cascade.detectMultiScale(gray, 1.1, 4)
+            if len(faces) > 0:
+                objects.append(f"faces ({len(faces)})")
             
         # Detect eyes (indicates close-up shots)
-        eyes = self.eye_cascade.detectMultiScale(gray, 1.1, 4)
-        if len(eyes) > 0:
-            objects.append(f"eyes ({len(eyes)})")
+        if self.eye_cascade is not None:
+            eyes = self.eye_cascade.detectMultiScale(gray, 1.1, 4)
+            if len(eyes) > 0:
+                objects.append(f"eyes ({len(eyes)})")
             
         return objects
     
