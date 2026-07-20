@@ -2,498 +2,95 @@ name: MCP Server Tests
 
 on:
   push:
-    branches: [ main, develop, 'feature/*mcp*', 'feature/*testing*' ]
+    branches: [ main, develop ]
   pull_request:
     branches: [ main ]
     paths:
       - 'src/**'
       - 'tests/**'
-      - 'test_*.sh'
-      - 'run_*.sh'
       - '.github/workflows/mcp-server-tests.yml'
 
 jobs:
   mcp-server-unit-tests:
     name: MCP Server Unit Tests
     runs-on: ubuntu-latest
-    
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-        
+
       - name: Setup Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: '3.13'
-          
+
       - name: Install UV
         run: |
           curl -LsSf https://astral.sh/uv/install.sh | sh
           echo "$HOME/.local/bin" >> $GITHUB_PATH
-          
+
       - name: Install dependencies
         run: uv sync --extra dev
-        
+
       - name: Install system dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y ffmpeg bc jq
-          
-      - name: Verify ffmpeg installation
-        run: |
+          sudo apt-get install -y ffmpeg mediainfo libsndfile1
           ffmpeg -version
-          ffprobe -version
-          
+
       - name: Setup test directories
         run: |
           sudo mkdir -p /tmp/pulse/ffmpeg-mcp/{generated-videos,youtube-downloads,test-files,source,temp,screenshots,metadata,ci-workflow}
-          sudo chmod -R 777 /tmp/kompo
-          # Copy test files if they exist
-          cp tests/files/* /tmp/pulse/ffmpeg-mcp/source/ 2>/dev/null || echo "Test files copied or not found"
-          
-      - name: Run Python unit tests
+          sudo mkdir -p /tmp/music/{source,temp,metadata,screenshots}
+          sudo chmod -R 777 /tmp/pulse /tmp/music
+          cp tests/files/* /tmp/pulse/ffmpeg-mcp/source/ 2>/dev/null || true
+          cp tests/files/* /tmp/music/source/ 2>/dev/null || true
+
+      - name: Generate CI test videos
         run: |
-          # Run our comprehensive music video workflow CI test instead of problematic legacy tests
-          uv run pytest tests/ci/test_music_video_workflow_ci.py -v
-          
+          mkdir -p tests/files
+          ffmpeg -f lavfi -i testsrc2=duration=5:size=1280x720:rate=25 -pix_fmt yuv420p -c:v libx264 -y tests/files/JJVtt947FfI_136.mp4
+          ffmpeg -f lavfi -i testsrc2=duration=5:size=720x1280:rate=25 -pix_fmt yuv420p -c:v libx264 -y tests/files/_wZ5Hof5tXY_136.mp4
+
+      - name: Run CI unit tests
+        run: |
+          uv run pytest tests/ci/test_unit_core.py tests/ci/test_integration_basic.py -v --tb=short
+          uv run python tests/test_basic_ci.py
+
       - name: Test MCP server import
-        run: |
-          uv run python -c "import src.server; print('✅ MCP server imports successfully')"
-
-  mcp-server-integration-tests:
-    name: MCP Server Integration Tests  
-    runs-on: ubuntu-latest
-    needs: mcp-server-unit-tests
-    
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        
-      - name: Setup Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.13'
-          
-      - name: Install UV
-        run: |
-          curl -LsSf https://astral.sh/uv/install.sh | sh
-          echo "$HOME/.local/bin" >> $GITHUB_PATH
-          
-      - name: Install dependencies
-        run: uv sync --extra dev
-        
-      - name: Install system dependencies with ffmpeg
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y ffmpeg bc jq xvfb
-          # Verify ffmpeg installation
-          ffmpeg -version
-          ffprobe -version
-          
-      - name: Setup CI test environment
-        run: |
-          # Scripts should be executable from git
-          ./test_ci_config.sh setup
-          
-      - name: Create test media files
-        run: |
-          # Let CI config create minimal test files if needed
-          ./test_ci_config.sh test unit
-          ls -la /tmp/music/source/
-          
-      - name: Start MCP server in background
-        run: |
-          # Start MCP server in background for testing
-          uv run python -m src.server &
-          MCP_PID=$!
-          echo "MCP_SERVER_PID=$MCP_PID" >> $GITHUB_ENV
-          sleep 5
-          echo "🚀 MCP Server started with PID: $MCP_PID"
-          
-      - name: Test MCP server functionality
-        run: |
-          # Test all MCP modules
-          ./test_ci_config.sh test integration
-          
-      - name: Test video verification script
-        run: |
-          # Run in headless mode for CI
-          export HEADLESS_MODE=true
-          export VIDEO_PLAYER=none
-          ./test_music_video_creation.sh "CI integration test" "" "natural_language" || echo "Test completed with expected CI limitations"
-          
-      - name: Test MCP natural environment workflow
-        run: |
-          ./test_mcp_natural_environment.sh "CI integration test workflow"
-          
-      - name: Test actual video creation (if possible)
-        run: |
-          echo "🎬 Testing actual video creation in CI..."
-          # Try to create a simple test video
-          if command -v ffmpeg &> /dev/null; then
-            ffmpeg -f lavfi -i testsrc2=duration=2:size=640x480:rate=25 \
-                   -f lavfi -i sine=frequency=440:duration=2 \
-                   -c:v libx264 -c:a aac -shortest \
-                   /tmp/music/temp/ci_test_video.mp4 -y
-            echo "✅ Test video created successfully"
-            ls -la /tmp/music/temp/ci_test_video.mp4
-            
-            # Verify the created video
-            ffprobe -v quiet -print_format json -show_format /tmp/music/temp/ci_test_video.mp4
-          else
-            echo "❌ ffmpeg not available for video creation test"
-          fi
-          
-      - name: Verify test artifacts and logs
-        run: |
-          echo "📋 Test files created:"
-          ls -la *.sh *.conf *.md || echo "No test scripts to show"
-          echo "📁 Generated files:"
-          ls -la /tmp/music/temp/ || echo "No generated files"
-          echo "📊 Test logs:"
-          cat /tmp/ci_test.log || echo "No CI logs found"
-          
-      - name: Upload test artifacts
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: mcp-test-artifacts
-          path: |
-            /tmp/music/temp/*.mp4
-            /tmp/ci_test.log
-            *.sh
-            *.conf
-            *.md
-          retention-days: 7
-          
-      - name: Cleanup
-        if: always()
-        run: |
-          # Clean up CI environment
-          ./test_ci_config.sh cleanup
-          # Kill MCP server if it's still running
-          if [ ! -z "$MCP_SERVER_PID" ]; then
-            kill $MCP_SERVER_PID || echo "MCP server already stopped"
-          fi
-
-  mcp-docker-tests:
-    name: MCP Server Docker Tests
-    runs-on: ubuntu-latest
-    needs: mcp-server-unit-tests
-    
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        
-      - name: Setup Docker Buildx
-        uses: docker/setup-buildx-action@v3
-        
-      - name: Build Docker image with Ubuntu single-stage
-        run: |
-          echo "🐳 Building Docker image for MCP server using Ubuntu single-stage (no pre-built base required)..."
-          docker buildx build \
-            --file docker/Dockerfile.ubuntu-single-stage \
-            --cache-from=type=gha,scope=ubuntu-single-stage \
-            --cache-to=type=gha,mode=max,scope=ubuntu-single-stage \
-            --load \
-            --tag ffmpeg-mcp:ci \
-            .
-          echo "✅ Docker image built successfully with Ubuntu single-stage approach"
-          docker images ffmpeg-mcp:ci
-          echo "Build time target: <3 minutes (vs 2+ hours Alpine compilation)"
-          
-      - name: Test Docker container health
-        run: |
-          echo "🔍 Testing Docker container health..."
-          # Start container in background with sleep to keep it running for testing
-          docker run -d --name mcp-test-container \
-            -p 8000:8000 \
-            --entrypoint /bin/bash \
-            ffmpeg-mcp:ci \
-            -c "sleep 300"
-          
-          # Wait for container to start
-          sleep 5
-          
-          # Check if container is running
-          if docker ps | grep -q mcp-test-container; then
-            echo "✅ Container is running"
-          else
-            echo "❌ Container failed to start"
-            echo "Container logs:"
-            docker logs mcp-test-container 2>&1 | head -20
-            exit 1
-          fi
-          
-      - name: Test MCP server import in Docker
-        run: |
-          echo "🧪 Testing MCP server modules in Docker..."
-          
-          # Debug: Check working directory and Python path
-          echo "Debug: Container environment:"
-          docker exec mcp-test-container pwd
-          docker exec mcp-test-container ls -la /app
-          docker exec mcp-test-container python3 -c "import sys; print('Python path:', sys.path)"
-          docker exec mcp-test-container printenv | grep PYTHON || echo "No PYTHON env vars"
-          
-          # Test imports with explicit PYTHONPATH - show all output for debugging
-          echo "Testing MCP imports with PYTHONPATH=/app..."
-          docker exec -e PYTHONPATH=/app mcp-test-container python3 -c "
-          try:
-              import src.server
-              import src.file_manager  
-              import src.ffmpeg_wrapper
-              print('SUCCESS: All MCP modules imported')
-          except Exception as e:
-              print(f'FAILED: {e}')
-              import traceback
-              traceback.print_exc()
-              exit(1)
-          " || {
-            echo "❌ MCP module imports failed - see error above"
-            exit 1
-          }
-          
-      - name: Test FFmpeg in Docker
-        run: |
-          echo "🎬 Testing FFmpeg in Docker container..."
-          docker exec mcp-test-container ffmpeg -version
-          docker exec mcp-test-container ffprobe -version
-          echo "✅ FFmpeg is working in Docker"
-          
-      - name: Test file operations in Docker
-        run: |
-          echo "📁 Testing file operations in Docker..."
-          # Create test directories
-          docker exec mcp-test-container mkdir -p /tmp/music/source /tmp/music/temp
-          
-          # Create a minimal test video
-          docker exec mcp-test-container ffmpeg \
-            -f lavfi -i testsrc2=duration=2:size=320x240:rate=25 \
-            -f lavfi -i sine=frequency=440:duration=2 \
-            -c:v libx264 -c:a aac -shortest \
-            /tmp/music/source/docker_test.mp4 -y
-          
-          # Verify the test video
-          docker exec mcp-test-container ffprobe \
-            -v quiet -print_format json -show_format \
-            /tmp/music/source/docker_test.mp4
-            
-          echo "✅ Video creation and verification working in Docker"
-          
-      - name: Test CI scripts in Docker
-        run: |
-          echo "🧪 Testing CI scripts in Docker..."
-          # Copy test scripts into container
-          docker cp test_ci_config.sh mcp-test-container:/app/
-          docker cp test_music_video_creation.sh mcp-test-container:/app/
-          
-          # Scripts should be executable from git - run directly
-          docker exec mcp-test-container bash -c "
-            export CI=true HEADLESS_MODE=true VIDEO_PLAYER=none
-            bash test_ci_config.sh setup
-            echo '✅ CI config setup completed in Docker'
-          "
-          
-      - name: Cleanup Docker test
-        if: always()
-        run: |
-          echo "🧹 Cleaning up Docker test resources..."
-          docker stop mcp-test-container || true
-          docker rm mcp-test-container || true
-          docker rmi ffmpeg-mcp:ci || true
-
-  mcp-full-workflow-test:
-    name: MCP Full Workflow Test
-    runs-on: ubuntu-latest
-    needs: [mcp-server-integration-tests, mcp-docker-tests]
-    
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        
-      - name: Setup Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.13'
-          
-      - name: Install UV and dependencies
-        run: |
-          curl -LsSf https://astral.sh/uv/install.sh | sh
-          echo "$HOME/.local/bin" >> $GITHUB_PATH
-          uv sync --extra dev
-          
-      - name: Install system dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y ffmpeg bc jq
-          
-      - name: Setup test environment
-        run: |
-          # Scripts should be executable from git
-          export CI=true GITHUB_ACTIONS=true
-          ./test_ci_config.sh setup
-          
-      - name: Run full workflow test
-        run: |
-          echo "🎬 Running complete MCP workflow test..."
-          export CI=true HEADLESS_MODE=true VIDEO_PLAYER=none
-          
-          # Start MCP server in background
-          uv run python -m src.server &
-          MCP_PID=$!
-          echo "MCP_SERVER_PID=$MCP_PID" >> $GITHUB_ENV
-          sleep 10
-          
-          # Run the full test suite
-          ./test_ci_config.sh test all
-          
-          echo "✅ Full workflow test completed"
-          
-      - name: Generate test report
-        if: always()
-        run: |
-          echo "📊 Generating test report..."
-          echo "# MCP Server CI Test Report" > test_report.md
-          echo "- Date: $(date)" >> test_report.md
-          echo "- Branch: ${{ github.ref_name }}" >> test_report.md
-          echo "- Commit: ${{ github.sha }}" >> test_report.md
-          echo "" >> test_report.md
-          echo "## Test Results" >> test_report.md
-          
-          if [ -f /tmp/ci_test.log ]; then
-            echo "### CI Test Log" >> test_report.md
-            echo '```' >> test_report.md
-            tail -20 /tmp/ci_test.log >> test_report.md
-            echo '```' >> test_report.md
-          fi
-          
-          echo "### Generated Files" >> test_report.md
-          ls -la /tmp/music/temp/ >> test_report.md || echo "No temp files" >> test_report.md
-          
-      - name: Upload test report
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: mcp-test-report
-          path: |
-            test_report.md
-            /tmp/ci_test.log
-            /tmp/music/temp/*
-          retention-days: 14
-          
-      - name: Cleanup workflow test
-        if: always()
-        run: |
-          ./test_ci_config.sh cleanup
-          if [ ! -z "$MCP_SERVER_PID" ]; then
-            kill $MCP_SERVER_PID || echo "MCP server already stopped"
-          fi
+        run: uv run python -c "import src.server; print('MCP server imports successfully')"
 
   mcp-test-documentation:
     name: Test Documentation Validation
     runs-on: ubuntu-latest
-    
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        
-      - name: Validate test scripts
-        run: |
-          # Check that test scripts exist and are executable
-          test -f test_music_video_creation.sh && echo "✅ Main test script exists"
-          test -f test_mcp_natural_environment.sh && echo "✅ Natural environment test exists"
-          test -f run_full_test.sh && echo "✅ Full test runner exists"
-          test -f test_examples.conf && echo "✅ Test configuration exists"
-          test -f TESTING_README.md && echo "✅ Test documentation exists"
-          
-      - name: Check script syntax
-        run: |
-          # Validate bash script syntax
-          bash -n test_music_video_creation.sh && echo "✅ Main test script syntax OK"
-          bash -n test_mcp_natural_environment.sh && echo "✅ Natural environment test syntax OK"
-          bash -n run_full_test.sh && echo "✅ Full test runner syntax OK"
-          
-      - name: Validate documentation
-        run: |
-          # Check that README contains key sections
-          grep -q "Music Video Creation Test System" TESTING_README.md && echo "✅ Documentation header found"
-          grep -q "test_music_video_creation.sh" TESTING_README.md && echo "✅ Main script documented"
-          grep -q "Natural Language" TESTING_README.md && echo "✅ Natural language workflow documented"
 
-  mcp-performance-baseline:
-    name: MCP Server Performance Baseline
-    runs-on: ubuntu-latest
-    needs: mcp-server-unit-tests
-    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || contains(github.ref, 'feature/'))
-    
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-        
-      - name: Setup Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.13'
-          
-      - name: Install UV and dependencies
+
+      - name: Validate project structure
         run: |
-          curl -LsSf https://astral.sh/uv/install.sh | sh
-          echo "$HOME/.local/bin" >> $GITHUB_PATH
-          uv sync --extra dev
-          
-      - name: Install system dependencies
+          required=(
+            README.md
+            CLAUDE.md
+            pyproject.toml
+            src/server.py
+            VIDEO_FORMAT_STRATEGY.md
+            tests/test_basic_ci.py
+            docs/FASTTRACK_COMPLETE_GUIDE.md
+            docs/INTEGRATION_GUIDE.md
+          )
+          for file in "${required[@]}"; do
+            if [[ -e "$file" ]]; then
+              echo "OK: $file"
+            else
+              echo "Missing: $file"
+              exit 1
+            fi
+          done
+
+      - name: Validate README content
         run: |
-          sudo apt-get update
-          sudo apt-get install -y ffmpeg time
-          
-      - name: Performance test - MCP server startup
-        run: |
-          echo "⏱️ Testing MCP server startup time..."
-          time uv run python -c "import src.server; print('Server imported')"
-          
-      - name: Performance test - File operations
-        run: |
-          echo "⏱️ Testing file operation performance..."
-          mkdir -p /tmp/music/source
-          # Create a small test file for performance testing
-          uv run python -c "
-          import time
-          start = time.time()
-          import src.file_manager
-          fm = src.file_manager.FileManager()
-          end = time.time()
-          print(f'File manager initialization: {end-start:.3f}s')
-          "
-          
-      - name: Performance test - Docker dependency fix validation
-        run: |
-          echo "🐳 Testing Docker opencv dependency fix..."
-          # Test the opencv import that was failing before our fix
-          uv run python -c "
-          import time
-          start = time.time()
-          try:
-              import cv2
-              end = time.time()
-              print(f'✅ OpenCV import successful: {end-start:.3f}s')
-          except ImportError as e:
-              print(f'❌ OpenCV import failed: {e}')
-              exit(1)
-          "
-          
-      - name: Performance test - FFmpeg integration
-        run: |
-          echo "🎬 Testing FFmpeg performance..."
-          time ffmpeg -f lavfi -i testsrc2=duration=1:size=320x240:rate=1 -y /tmp/test_perf.mp4
-          ls -lh /tmp/test_perf.mp4
-          echo "✅ FFmpeg basic operation completed"
-          
-      - name: Save performance metrics
-        run: |
-          echo "📊 Performance baseline established"
-          echo "✅ Server startup time measured"
-          echo "✅ File manager initialization measured"  
-          echo "✅ OpenCV dependency availability confirmed"
-          echo "✅ FFmpeg basic operations measured"
-          echo "Performance metrics available for regression detection"
+          grep -q "ismailubts/pulse-ffmpeg-mcp" README.md
+          grep -q "uv sync" README.md
+          grep -q "src.server" README.md

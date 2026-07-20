@@ -1,19 +1,27 @@
-# FFMPEG MCP Server - CI-optimized using pre-built base
-FROM ghcr.io/ismailubts/pulse-ffmpeg-mcp:base-latest
+# FFMPEG MCP Server - self-contained CI image (no external base registry required)
+FROM ubuntu:22.04
 
-# Install only essential dependencies for CI testing
-RUN uv pip install --system --no-cache \
-    "pytest>=8.4.0" \
-    "pytest-asyncio>=1.0.0"
+ENV DEBIAN_FRONTEND=noninteractive \
+    PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1
 
-# Copy only test scripts needed for CI
-COPY test_fast_filter_ci.py ./
-COPY video_comparison_test_library.py ./
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3 \
+    python3-pip \
+    ffmpeg \
+    && rm -rf /var/lib/apt/lists/*
 
-# Default command
-CMD ["python", "test_fast_filter_ci.py", "--help"]
+WORKDIR /app
 
-# Labels
+COPY pyproject.toml README.md LICENSE ./
+COPY src/ ./src/
+COPY tests/ci/test_unit_core.py ./tests/ci/
+
+RUN pip3 install --no-cache-dir --upgrade pip && \
+    pip3 install --no-cache-dir -e .[dev]
+
+CMD ["python3", "-m", "pytest", "tests/ci/test_unit_core.py", "-v"]
+
 LABEL maintainer="ismailubts" \
       version="1.0.0-ci" \
-      description="FFMPEG MCP Server - CI Build (Lightweight)"
+      description="Pulse FFmpeg MCP - CI build"

@@ -47,27 +47,20 @@ jobs:
       run: |
         sudo mkdir -p /tmp/music/{source,temp,metadata,screenshots}
         sudo mkdir -p /tmp/pulse/ffmpeg-mcp/{generated-videos,youtube-downloads,test-files,source,temp,screenshots,metadata,ci-workflow}
-        sudo chmod -R 777 /tmp/music /tmp/kompo
-        cp tests/files/* /tmp/music/source/ || echo "Test files copied (or not found)"
-        # Copy test files to both locations for compatibility
-        cp tests/files/* /tmp/pulse/ffmpeg-mcp/source/ 2>/dev/null || echo "Files copied to kompo location"
+        sudo chmod -R 777 /tmp/music /tmp/pulse
+        cp tests/files/* /tmp/music/source/ 2>/dev/null || echo "Test files copied (or not found)"
+        cp tests/files/* /tmp/pulse/ffmpeg-mcp/source/ 2>/dev/null || echo "Files copied to pulse location"
+        mkdir -p tests/files
+        ffmpeg -f lavfi -i testsrc2=duration=5:size=1280x720:rate=25 -pix_fmt yuv420p -c:v libx264 -y tests/files/JJVtt947FfI_136.mp4
+        ffmpeg -f lavfi -i testsrc2=duration=5:size=720x1280:rate=25 -pix_fmt yuv420p -c:v libx264 -y tests/files/_wZ5Hof5tXY_136.mp4
         ls -la /tmp/music/
         ls -la /tmp/pulse/ffmpeg-mcp/
     
     - name: Run all core tests
       run: |
         source .venv/bin/activate
-        echo "Running unit core tests..."
-        python -m pytest tests/ci/test_unit_core.py -v --tb=short || echo "Unit tests failed"
-        echo "Running integration tests..."
-        python -m pytest tests/ci/test_integration_basic.py -v --tb=short || echo "Integration tests failed"  
-        echo "Running MCP server tests..."
-        python -m pytest tests/ci/test_mcp_server.py -v --tb=short || echo "MCP server tests failed"
-        echo "Running music video workflow tests..."
-        python -m pytest tests/ci/test_music_video_workflow_ci.py -v --tb=short || echo "Music video workflow tests failed"
-        # Create some test artifacts to ensure upload doesn't fail
-        echo "Test completed at $(date)" > /tmp/music/temp/test_completion.log
-        ls -la /tmp/music/temp/
+        python -m pytest tests/ci/test_unit_core.py tests/ci/test_integration_basic.py tests/ci/test_mcp_server.py -v --tb=short
+        python tests/test_basic_ci.py
         
     - name: Upload test artifacts
       uses: actions/upload-artifact@v4

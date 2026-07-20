@@ -14,6 +14,12 @@ from pathlib import Path
 
 # Import from src module directly
 
+def _tool_result_content(result):
+    """Normalize FastMCP call_tool responses to content list."""
+    if isinstance(result, tuple):
+        return result[0]
+    return result
+
 @pytest.mark.asyncio
 async def test_mcp_server_startup():
     """Test that MCP server can start and respond"""
@@ -21,7 +27,7 @@ async def test_mcp_server_startup():
         from src.server import mcp
         
         # Test server is responsive
-        result = await mcp.call_tool("get_available_operations", {})
+        result = _tool_result_content(await mcp.call_tool("get_available_operations", {}))
         assert isinstance(result, list)
         assert len(result) > 0
         
@@ -51,7 +57,7 @@ async def test_mcp_list_files():
     try:
         from src.server import mcp
         
-        result = await mcp.call_tool("list_files", {})
+        result = _tool_result_content(await mcp.call_tool("list_files", {}))
         assert isinstance(result, list)
         
         if hasattr(result[0], 'text'):
@@ -89,7 +95,7 @@ async def test_mcp_file_info():
             
         # Test get_file_info on first file
         test_file_id = files[0]["id"]
-        info_result = await mcp.call_tool("get_file_info", {"file_id": test_file_id})
+        info_result = _tool_result_content(await mcp.call_tool("get_file_info", {"file_id": test_file_id}))
         
         assert isinstance(info_result, list)
         if hasattr(info_result[0], 'text'):

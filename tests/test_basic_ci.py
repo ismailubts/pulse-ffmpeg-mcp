@@ -16,7 +16,7 @@ def test_video_format_strategy_exists():
         assert "internal" in content.lower(), "Internal processing strategy not documented"
         assert "export" in content.lower(), "Export strategy not documented"
     
-    print("✅ Video format strategy documentation complete")
+    print("Video format strategy documentation complete")
     return True
 
 def test_komposition_processor_has_compatibility_method():
@@ -30,7 +30,7 @@ def test_komposition_processor_has_compatibility_method():
         assert "YUV420P" in content, "YUV420P compatibility not implemented"
         assert "youtube_recommended_encode" in content, "YouTube encoding not referenced"
     
-    print("✅ Compatibility encoding method exists")
+    print("Compatibility encoding method exists")
     return True
 
 def test_compatibility_encoding_not_premature():
@@ -59,12 +59,12 @@ def test_compatibility_encoding_not_premature():
             # This is expected behavior - the method should be available but not called prematurely
             pass
     
-    print("✅ Compatibility encoding properly positioned")
+    print("Compatibility encoding properly positioned")
     return True
 
 def main():
     """Run basic CI tests"""
-    print("🚀 Basic Video Format Strategy CI")
+    print("Basic Video Format Strategy CI")
     print("=" * 40)
     
     tests = [
@@ -79,19 +79,19 @@ def main():
             result = test()
             results.append(True)
         except Exception as e:
-            print(f"❌ {test.__name__} failed: {e}")
+            print(f"FAIL: {test.__name__} failed: {e}")
             results.append(False)
     
     passed = sum(results)
     total = len(results)
     
-    print(f"\n🎯 Results: {passed}/{total} tests passed")
+    print(f"\nResults: {passed}/{total} tests passed")
     
     if passed == total:
-        print("✅ All basic CI tests PASSED!")
+        print("All basic CI tests PASSED!")
         return 0
     else:
-        print("❌ Some basic CI tests FAILED!")
+        print("Some basic CI tests FAILED!")
         return 1
 
 if __name__ == "__main__":
