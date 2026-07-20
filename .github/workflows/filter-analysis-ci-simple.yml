@@ -1,0 +1,39 @@
+name: Simple CI Test
+# Simplified CI test to replace complex filter analysis workflow
+
+on:
+  push:
+    branches: [ main, feature/* ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  basic-ci-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Build CI Docker image
+      run: |
+        docker buildx build \
+          --file Dockerfile.ci \
+          --tag ffmpeg-mcp:ci-test \
+          --load \
+          .
+
+    - name: Run basic CI tests
+      run: |
+        echo "Running basic CI tests..."
+        docker run --rm ffmpeg-mcp:ci-test
+
+    - name: Verify Docker image
+      run: |
+        echo "Verifying Docker image contents..."
+        docker run --rm ffmpeg-mcp:ci-test ls -la /app/

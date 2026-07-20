@@ -1,0 +1,104 @@
+# Docker ignore file for FFMPEG MCP Server
+
+# Git and version control
+.git
+.gitignore
+.gitattributes
+
+# Python cache and virtual environments
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+ENV/
+env/
+
+# UV package manager
+.venv/
+
+# Testing and coverage
+.coverage
+.pytest_cache/
+htmlcov/
+.tox/
+.nox/
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Temporary files and build artifacts
+*.tmp
+*.temp
+.tmp/
+build/
+dist/
+*.egg-info/
+
+# Documentation build
+docs/_build/
+
+# Local development files
+.env
+.env.local
+.env.development
+.env.test
+.env.production
+
+# Log files
+*.log
+logs/
+
+# Container and deployment files (don't include in build context)
+Dockerfile*
+docker-compose*.yml
+.dockerignore
+
+# Large test files (keep structure but exclude large media for CI speed)
+# tests/files/*.mp4  # Commented out to allow CI testing
+# tests/files/*.mov  # Commented out to allow CI testing  
+# tests/files/*.avi  # Commented out to allow CI testing
+!tests/files/small-*.mp4
+
+# Generated output directories (will be created by container)
+/tmp/music/temp/*
+/tmp/music/screenshots/*
+/tmp/music/metadata/*
+
+# Development and documentation that's not needed in container  
+documents/ai-generated/
+archive/
+examples/video-workflows/
+examples/komposition-examples/
+tools/analysis/
+tools/testing/
+scripts/benchmark_*
+scripts/main.py
+deployment/
+PROJECT_STRUCTURE.md
+IMPROVEMENT_PLAN.md
+*.md
+!README.md
+!CLAUDE.md
+
+# Keep only essential files for runtime
+!src/
+!tests/test_*.py
+!pyproject.toml
+!README.md
+!CLAUDE.md

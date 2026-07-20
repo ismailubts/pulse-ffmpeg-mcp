@@ -1,0 +1,18 @@
+# Haiku Subagent Integration Dependencies
+
+# Anthropic API client for Claude Haiku model
+# Provides cost-effective video analysis ($0.02-0.05 per analysis)
+anthropic>=0.25.0
+
+# Optional: Enhanced logging for AI decisions
+structlog>=23.0.0
+
+# Optional: Caching for analysis results
+cachetools>=5.0.0
+
+# Optional: Rate limiting for API calls
+ratelimit>=2.2.0
+
+# Development dependencies (optional)
+pytest>=7.0.0
+pytest-asyncio>=0.21.0

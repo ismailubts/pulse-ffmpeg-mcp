@@ -1,0 +1,205 @@
+#!/usr/bin/env python3
+"""
+FastTrack Agent - AI-Powered Video Processing Analysis
+Cost-effective video processing decisions using Claude Haiku
+"""
+
+import asyncio
+import json
+import sys
+import os
+from pathlib import Path
+from typing import Dict, List, Any, Optional
+
+# Add src to path for imports
+script_dir = Path(__file__).parent.parent
+sys.path.insert(0, str(script_dir / "src"))
+
+try:
+    from haiku_subagent import HaikuSubagent, ProcessingStrategy, CostLimits, VideoAnalysis
+except ImportError as e:
+    print(f"Error importing FastTrack components: {e}")
+    sys.exit(1)
+
+def parse_video_files(video_input: str) -> List[Path]:
+    """Parse video file input - can be comma-separated paths or directory"""
+    if not video_input:
+        return []
+    
+    # Handle comma-separated file paths
+    if ',' in video_input:
+        files = [Path(f.strip()) for f in video_input.split(',')]
+    else:
+        # Handle single file or directory
+        path = Path(video_input)
+        if path.is_dir():
+            # Find video files in directory
+            video_extensions = ['.mp4', '.avi', '.mov', '.mkv', '.webm']
+            files = []
+            for ext in video_extensions:
+                files.extend(path.glob(f'*{ext}'))
+            files.sort()
+        else:
+            files = [path]
+    
+    return [f for f in files if f.exists()]
+
+async def analyze_video_strategy(video_files: List[Path], api_key: Optional[str] = None) -> Dict[str, Any]:
+    """Analyze video files and recommend processing strategy"""
+    
+    if not video_files:
+        return {
+            "status": "ERROR",
+            "primary_error": "No valid video files provided",
+            "confidence": "1/10",
+            "immediate_fix": "Provide valid video file paths"
+        }
+    
+    try:
+        # Initialize FastTrack with cost optimization
+        fasttrack = HaikuSubagent(
+            anthropic_api_key=api_key,
+            cost_limits=CostLimits(daily_limit=5.0, per_analysis_limit=0.10),
+            fallback_enabled=True
+        )
+        
+        # Perform analysis
+        analysis = await fasttrack.analyze_video_files(video_files)
+        
+        # Get cost status
+        cost_status = fasttrack.get_cost_status()
+        
+        # Format for Claude Code integration
+        result = {
+            "status": "SUCCESS",
+            "recommended_strategy": analysis.recommended_strategy.value,
+            "confidence": f"{analysis.confidence:.1f}/1.0",
+            "video_analysis": {
+                "file_count": len(video_files),
+                "has_frame_issues": analysis.has_frame_issues,
+                "needs_normalization": analysis.needs_normalization,
+                "complexity_score": f"{analysis.complexity_score:.2f}",
+                "reasoning": analysis.reasoning
+            },
+            "cost_analysis": {
+                "analysis_cost": f"${analysis.estimated_cost:.4f}",
+                "daily_spend": f"${cost_status['daily_spend']:.4f}",
+                "budget_remaining": f"${cost_status['remaining_budget']:.4f}",
+                "model_used": "claude-3-haiku-20240307" if api_key else "heuristic"
+            },
+            "processing_recommendations": format_processing_recommendations(analysis),
+            "immediate_actions": format_immediate_actions(analysis, video_files),
+            "verification_steps": [
+                f"Test processing with {analysis.recommended_strategy.value} strategy",
+                "Verify output quality and frame alignment",
+                "Check cost tracking and budget status"
+            ]
+        }
+        
+        return result
+        
+    except Exception as e:
+        return {
+            "status": "ERROR",
+            "primary_error": f"FastTrack analysis failed: {str(e)}",
+            "confidence": "2/10",
+            "immediate_fix": "Check video file paths and FastTrack configuration"
+        }
+
+def format_processing_recommendations(analysis: VideoAnalysis) -> List[str]:
+    """Format processing recommendations based on analysis"""
+    recommendations = []
+    
+    strategy_map = {
+        ProcessingStrategy.STANDARD_CONCAT: "Use simple concatenation for compatible formats",
+        ProcessingStrategy.CROSSFADE_CONCAT: "Apply crossfade transitions to fix frame timing issues",
+        ProcessingStrategy.KEYFRAME_ALIGN: "Force keyframe alignment for sync problems",
+        ProcessingStrategy.NORMALIZE_FIRST: "Normalize video formats before processing",
+        ProcessingStrategy.DIRECT_PROCESS: "Process single file without concatenation"
+    }
+    
+    recommendations.append(strategy_map.get(analysis.recommended_strategy, "Unknown strategy"))
+    
+    if analysis.has_frame_issues:
+        recommendations.append("Frame alignment fixes recommended for smooth playback")
+    
+    if analysis.needs_normalization:
+        recommendations.append("Video format normalization required for compatibility")
+        
+    if analysis.complexity_score > 0.7:
+        recommendations.append("Complex processing - consider breaking into smaller batches")
+    
+    return recommendations
+
+def format_immediate_actions(analysis: VideoAnalysis, video_files: List[Path]) -> List[str]:
+    """Format immediate actionable commands"""
+    actions = []
+    
+    # Strategy-specific actions
+    if analysis.recommended_strategy == ProcessingStrategy.CROSSFADE_CONCAT:
+        actions.append("python3 -c \"from src.haiku_subagent import yolo_smart_concat; # Use crossfade concat\"")
+    elif analysis.recommended_strategy == ProcessingStrategy.NORMALIZE_FIRST:
+        actions.append("ffmpeg -i input.mp4 -c:v libx264 -r 30 -s 1920x1080 normalized.mp4")
+    
+    # Testing actions
+    actions.append(f"python3 test_quickcut_simple.py  # Test with {len(video_files)} files")
+    
+    if len(video_files) > 1:
+        actions.append("ls -la testdata/  # Verify all video files exist")
+    
+    return actions
+
+def claude_code_entry_point(video_input: str, **kwargs) -> str:
+    """
+    Optimized entry point for Claude Code Task tool integration
+    
+    Returns actionable video processing analysis
+    """
+    
+    # Parse video file inputs
+    video_files = parse_video_files(video_input)
+    
+    if not video_files:
+        return json.dumps({
+            "status": "ERROR",
+            "primary_error": "No valid video files found",
+            "confidence": "1/10",
+            "immediate_fix": f"Check video paths in: {video_input}",
+            "suggestions": [
+                "Use comma-separated paths: 'video1.mp4,video2.mp4'", 
+                "Or provide directory path: 'testdata/'",
+                "Ensure video files exist and are accessible"
+            ]
+        }, indent=2)
+    
+    # Get API key from environment
+    api_key = os.getenv('ANTHROPIC_API_KEY')
+    
+    # Run async analysis
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    try:
+        result = loop.run_until_complete(analyze_video_strategy(video_files, api_key))
+        return json.dumps(result, indent=2)
+    finally:
+        loop.close()
+
+def main():
+    """CLI entry point for standalone testing"""
+    if len(sys.argv) < 2:
+        print("FastTrack - AI-Powered Video Processing Analysis")
+        print("\nUsage: python3 ft <video_files>")
+        print("\nExamples:")
+        print("  python3 ft testdata/                    # Analyze all videos in directory")
+        print("  python3 ft video1.mp4,video2.mp4       # Analyze specific files")
+        print("  python3 ft video.mp4                    # Analyze single file")
+        print("\nEnvironment:")
+        print("  ANTHROPIC_API_KEY - Optional, uses heuristic analysis if not set")
+        sys.exit(1)
+    
+    video_input = sys.argv[1]
+    result = claude_code_entry_point(video_input)
+    print(result)
+
+if __name__ == "__main__":
+    main()

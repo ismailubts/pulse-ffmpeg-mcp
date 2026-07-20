@@ -1,0 +1,17 @@
+# Haiku Integration - Test Build (minimal for validation)
+FROM python:3.13-slim
+
+# Install basic system dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Test basic Python setup
+RUN pip install --no-cache-dir aiohttp
+
+# Simple test directory
+WORKDIR /app
+RUN echo "Haiku minimal build test" > test.txt
+
+# Test command
+CMD ["python", "--version"]

@@ -1,0 +1,80 @@
+# DEPRECATED: FFMPEG MCP Server - Base image approach
+# 
+# PROBLEM: This approach was designed to make Alpine builds faster by pre-building
+# heavy dependencies (OpenCV, GCC toolchain, scientific computing stack).
+# However, this creates a complex multi-stage build process.
+#
+# ORIGINAL UBUNTU INTENT: Simple Ubuntu base + Java 21 + FFmpeg + ffprobe only.
+# NOT: Recreating the entire Alpine complexity on Ubuntu.
+#
+# DECISION: Moving away from Docker base approach. 
+# - Alpine complexity doesn't belong in "minimal" Ubuntu base
+# - Single-stage builds are simpler and more maintainable
+# - Use Dockerfile.haiku-minimal pattern for future builds
+#
+# This file is kept for reference but should not be used in CI.
+#
+# OBSOLETE - Use direct Ubuntu builds instead
+FROM python:3.13-alpine
+
+# Set environment variables
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
+
+# Install system dependencies (slow part - cached in GHCR)
+RUN apk add --no-cache \
+    # Core utilities
+    bash \
+    curl \
+    netcat-openbsd \
+    # FFmpeg and multimedia
+    ffmpeg \
+    # Build tools and development libraries
+    gcc \
+    g++ \
+    musl-dev \
+    linux-headers \
+    # OpenCV dependencies - comprehensive build support
+    glib-dev \
+    pkgconfig \
+    # Audio processing
+    libsndfile-dev \
+    # Python development and compilation support
+    python3-dev \
+    # Build dependencies for pip packages
+    build-base \
+    cmake \
+    openblas-dev \
+    jpeg-dev \
+    libpng-dev \
+    tiff-dev \
+    libwebp-dev \
+    zlib-dev
+
+# Install heavy Python dependencies with Alpine-specific handling
+RUN pip install --no-cache-dir \
+    # Scientific computing first (required by OpenCV)
+    numpy>=1.24.0 \
+    # Image processing
+    pillow>=10.0.0 \
+    # System utilities
+    psutil>=5.9.0 && \
+    # OpenCV separately with build timeout (can take 10+ minutes on Alpine)
+    pip install --no-cache-dir opencv-python-headless>=4.8.0
+
+# Create working directory
+WORKDIR /app
+
+# Create non-root user
+RUN addgroup -g 1000 mcp && adduser -u 1000 -G mcp -s /bin/bash -D mcp
+
+# Create directories for file processing
+RUN mkdir -p /tmp/music/source /tmp/music/temp /tmp/music/screenshots /tmp/music/metadata /tmp/music/finished \
+    && chown -R mcp:mcp /app /tmp/music
+
+# Labels
+LABEL maintainer="Stig Lau" \
+      version="1.0.0-base" \
+      description="FFMPEG MCP Server - Base Image (System Dependencies Only)"

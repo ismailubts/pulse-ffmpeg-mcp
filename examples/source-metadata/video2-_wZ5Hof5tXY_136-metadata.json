@@ -1,0 +1,59 @@
+{
+  "sourceId": "_wZ5Hof5tXY_136",
+  "originalFilename": "_wZ5Hof5tXY_136.mp4",
+  "fileId": "file_b6907f58",
+  "youtubeId": "_wZ5Hof5tXY",
+  "metadata": {
+    "duration": 57.53,
+    "resolution": "unknown", 
+    "fileSize": 10733861,
+    "format": "mp4"
+  },
+  "contentAnalysis": {
+    "sceneCount": 3,
+    "averageSceneDuration": 19.18,
+    "primaryObjects": ["faces", "eyes"],
+    "visualCharacteristics": ["dark", "red_tones", "medium_detail", "normal_lighting"],
+    "contentType": "personal/social"
+  },
+  "usableSegments": [
+    {
+      "id": "dramatic_opening",
+      "name": "Dark Dramatic Faces",
+      "start": 0.0,
+      "end": 21.9,
+      "duration": 21.9,
+      "characteristics": ["dark", "red_tones", "medium_detail", "faces"],
+      "suitableFor": ["intro", "dramatic_sequence", "buildup"]
+    },
+    {
+      "id": "main_sequence",
+      "name": "Eye Focus Sequence",
+      "start": 21.9,
+      "end": 55.83,
+      "duration": 33.93,
+      "characteristics": ["normal_lighting", "red_tones", "eyes"],
+      "suitableFor": ["verse", "main_content", "extended_sequence"]
+    },
+    {
+      "id": "fade_ending",
+      "name": "Dark Fade Out",
+      "start": 55.83,
+      "end": 57.53,
+      "duration": 1.7,
+      "characteristics": ["dark", "red_tones", "low_detail"],
+      "suitableFor": ["outro", "transition", "fade"]
+    }
+  ],
+  "editingNotes": {
+    "strengths": ["Strong dramatic opening", "Consistent visual theme", "Natural fade ending"],
+    "considerations": ["Very long middle section", "Predominantly dark tones", "Limited scene variety"],
+    "recommendations": ["Use opening for dramatic impact", "Trim middle section", "Excellent for atmospheric content"]
+  },
+  "komposteurCompatibility": {
+    "sourceRef": "_wZ5Hof5tXY_136.mp4",
+    "segmentTimingsPrecise": true,
+    "transitionReady": true,
+    "bpmSyncable": true
+  }
+}

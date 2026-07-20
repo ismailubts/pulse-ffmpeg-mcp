@@ -1,0 +1,62 @@
+# FFMPEG MCP Server - Single-stage Ubuntu for CI
+# No pre-built base required - everything in one fast build
+FROM ubuntu:22.04
+
+# Prevent interactive prompts during package installation
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Set Python and Java environment
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64
+
+# Install system dependencies (Python + Java + FFmpeg)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    # Python runtime (MCP Server)
+    python3 \
+    python3-pip \
+    python3-venv \
+    # Java for Komposteur integration
+    openjdk-21-jdk \
+    # FFmpeg for video processing
+    ffmpeg \
+    # Basic utilities
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create working directory and user
+WORKDIR /app
+RUN useradd -m -u 1000 mcp && \
+    chown -R mcp:mcp /app
+
+# Create directories for FFMPEG processing
+RUN mkdir -p /tmp/music/{source,temp,metadata,screenshots,finished} && \
+    chown -R mcp:mcp /tmp/music
+
+# Copy application code
+COPY pyproject.toml /app/
+COPY src/ /app/src/
+COPY tests/ /app/tests/
+
+# Install Python dependencies with explicit MCP support
+RUN python3 -m pip install --no-cache-dir --upgrade pip && \
+    python3 -m pip install --no-cache-dir .[dev]
+
+# Switch to non-root user
+USER mcp
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=10s \
+    CMD python3 --version && java -version && ffmpeg -version > /dev/null 2>&1 || exit 1
+
+# Expose MCP server port
+EXPOSE 8000
+
+# Run MCP server
+CMD ["python3", "-m", "src.server"]
+
+# Labels
+LABEL maintainer="Stig Lau" \
+      version="1.0.0-ubuntu-single-stage" \
+      description="FFMPEG MCP Server - Single-stage Ubuntu (CI optimized)" \
+      build-time="~2-3 minutes vs 2+ hours Alpine"

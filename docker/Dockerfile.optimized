@@ -1,0 +1,52 @@
+# FFMPEG MCP Server - Production image using optimized base
+FROM ghcr.io/stiglau/yolo-ffmpeg-mcp:base-optimized-latest
+
+# Copy dependency files first for better layer caching
+COPY pyproject.toml ./
+
+# Install core Python dependencies (fast - heavy packages pre-installed in base)
+# Use UV with optimized settings for Docker
+RUN uv pip install --system --no-cache --prefer-binary \
+    "fastmcp>=2.7.1" \
+    "mcp>=1.9.3" \
+    "pydantic>=2.11.5" \
+    "pytest>=8.4.0" \
+    "pytest-asyncio>=1.0.0" \
+    "jsonschema>=4.0.0" \
+    "PyYAML>=6.0"
+# Note: opencv-python-headless, pillow, numpy, psutil pre-installed in base
+
+# Copy application code (separate layer for faster rebuilds)
+COPY src/ ./src/
+COPY tests/ ./tests/
+COPY README.md ./
+
+# Set Python path for module imports  
+ENV PYTHONPATH=/app
+
+# Create trace logging directory
+RUN mkdir -p /tmp/mcp-traces \
+    && chown -R mcp:mcp /tmp/mcp-traces
+
+# Create health check script
+RUN echo '#!/bin/bash\npython -c "import src.server; print(\"✅ MCP server OK\")" || exit 1' > /app/healthcheck.sh \
+    && chmod +x /app/healthcheck.sh \
+    && chown mcp:mcp /app/healthcheck.sh
+
+# Switch to non-root user
+USER mcp
+
+# Expose MCP server port
+EXPOSE 8000
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD /app/healthcheck.sh
+
+# Default command
+CMD ["python", "-m", "src.server"]
+
+# Labels
+LABEL maintainer="Stig Lau" \
+      version="1.0.0-optimized" \
+      description="FFMPEG MCP Server - Optimized Build"

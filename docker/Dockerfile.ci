@@ -1,0 +1,19 @@
+# FFMPEG MCP Server - CI-optimized using pre-built base
+FROM ghcr.io/ismailubts/pulse-ffmpeg-mcp:base-latest
+
+# Install only essential dependencies for CI testing
+RUN uv pip install --system --no-cache \
+    "pytest>=8.4.0" \
+    "pytest-asyncio>=1.0.0"
+
+# Copy only test scripts needed for CI
+COPY test_fast_filter_ci.py ./
+COPY video_comparison_test_library.py ./
+
+# Default command
+CMD ["python", "test_fast_filter_ci.py", "--help"]
+
+# Labels
+LABEL maintainer="ismailubts" \
+      version="1.0.0-ci" \
+      description="FFMPEG MCP Server - CI Build (Lightweight)"

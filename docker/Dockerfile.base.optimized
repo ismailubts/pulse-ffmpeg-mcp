@@ -1,0 +1,47 @@
+# FFMPEG MCP Server - Optimized Base Image (Performance First)  
+# This image prioritizes build speed over image size
+FROM python:3.13-alpine
+
+# Set environment variables
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
+
+# Install minimal system dependencies for FFMPEG + Java + Python
+RUN apk add --no-cache \
+    bash \
+    curl \
+    ffmpeg \
+    openjdk11-jre \
+    # Audio processing (for VDVIL)
+    libsndfile-dev \
+    # Minimal Python build support
+    python3-dev \
+    gcc \
+    musl-dev
+
+# Install minimal Python dependencies
+RUN pip install --no-cache-dir --root-user-action=ignore \
+    psutil>=5.9.0
+
+# Create working directory
+WORKDIR /app
+
+# Create non-root user 
+RUN addgroup -g 1000 mcp && adduser -u 1000 -G mcp -s /bin/bash -D mcp
+
+# Create directories for file processing with proper permissions
+RUN mkdir -p /tmp/music/{source,temp,screenshots,metadata,finished} \
+    && chown -R mcp:mcp /app /tmp/music
+
+# Test that critical tools work
+RUN ffmpeg -version > /dev/null 2>&1 && \
+    java -version > /dev/null 2>&1 && \
+    python -c "import psutil; print('Python OK')" && \
+    echo "✅ Minimal base image validation passed"
+
+# Labels
+LABEL maintainer="Stig Lau" \
+      version="1.0.0-base-minimal" \
+      description="FFMPEG MCP Server - Minimal Base (Alpine + FFMPEG + Java + Python 3.13)"

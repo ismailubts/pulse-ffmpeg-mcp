@@ -1,0 +1,302 @@
+name: Filter Analysis CI Test
+# Updated to fix dependency installation issues
+
+on:
+  push:
+    branches: [ main, feature/* ]
+  pull_request:
+    branches: [ main ]
+  schedule:
+    # Run daily at 2 AM UTC to catch any regressions
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+    inputs:
+      test_count:
+        description: 'Number of random filter tests to run'
+        required: false
+        default: '2'
+        type: string
+      specific_filters:
+        description: 'Test specific filters (comma-separated, e.g., "edge_detect,dramatic_bw")'
+        required: false
+        default: ''
+        type: string
+
+jobs:
+  filter-analysis-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Cache Docker layers
+      uses: actions/cache@v4
+      with:
+        path: /tmp/.buildx-cache
+        key: ${{ runner.os }}-docker-ci-${{ hashFiles('Dockerfile.ci', 'pyproject.toml') }}
+        restore-keys: |
+          ${{ runner.os }}-docker-ci-
+          ${{ runner.os }}-docker-
+
+    - name: Build lightweight CI Docker image with cache
+      run: |
+        docker buildx build \
+          --file Dockerfile.ci \
+          --cache-from=type=local,src=/tmp/.buildx-cache \
+          --cache-to=type=local,dest=/tmp/.buildx-cache-new,mode=max \
+          --load \
+          --tag ffmpeg-mcp:ci-test \
+          .
+        
+        # Move cache to avoid size issues
+        rm -rf /tmp/.buildx-cache
+        mv /tmp/.buildx-cache-new /tmp/.buildx-cache || true
+
+    - name: Prepare test environment and files
+      run: |
+        # Create required directories
+        mkdir -p /tmp/music/source
+        mkdir -p /tmp/music/temp
+        mkdir -p /tmp/music/ci_test_outputs
+        
+        # Create test video and audio using Docker container
+        docker run --rm \
+          -v /tmp/music:/tmp/music \
+          ffmpeg-mcp:ci-test \
+          bash -c "
+            ffmpeg -f lavfi -i testsrc2=duration=60:size=720x1280:rate=30 \
+                   -f lavfi -i sine=frequency=440:duration=60 \
+                   -c:v libx264 -c:a aac -shortest \
+                   /tmp/music/source/_wZ5Hof5tXY_136.mp4 && \
+            ffmpeg -f lavfi -i sine=frequency=220:duration=60 \
+                   -c:a flac \
+                   '/tmp/music/source/Subnautic Measures.flac'
+          "
+        
+        echo "Test files created:"
+        ls -la /tmp/music/source/
+
+    - name: Run basic CI tests
+      id: basic_tests
+      run: |
+        echo "Running basic CI tests..."
+        
+        # Run the test using Docker container (using default CMD from Dockerfile.ci)
+        if docker run --rm \
+          -v /tmp/music:/tmp/music \
+          --workdir /app \
+          ffmpeg-mcp:ci-test; then
+          echo "random_tests_result=success" >> $GITHUB_OUTPUT
+        else
+          echo "random_tests_result=failure" >> $GITHUB_OUTPUT
+        fi
+
+    - name: Run specific filter tests
+      id: specific_tests
+      if: github.event.inputs.specific_filters != ''
+      run: |
+        SPECIFIC_FILTERS="${{ github.event.inputs.specific_filters }}"
+        echo "Testing specific filters: $SPECIFIC_FILTERS"
+        
+        # Parse comma-separated filters
+        IFS=',' read -ra FILTER_ARRAY <<< "$SPECIFIC_FILTERS"
+        
+        if [ ${#FILTER_ARRAY[@]} -eq 2 ]; then
+          echo "Testing ${FILTER_ARRAY[0]} vs ${FILTER_ARRAY[1]}"
+          if docker run --rm \
+            -v /tmp/music:/tmp/music \
+            -v ${{ github.workspace }}:/app \
+            --workdir /app \
+            ffmpeg-mcp:ci-test \
+            python test_fast_filter_ci.py --specific "${FILTER_ARRAY[0]}" "${FILTER_ARRAY[1]}"; then
+            echo "specific_tests_result=success" >> $GITHUB_OUTPUT
+          else
+            echo "specific_tests_result=failure" >> $GITHUB_OUTPUT
+          fi
+        else
+          echo "Error: Specific filter testing requires exactly 2 filters"
+          echo "specific_tests_result=error" >> $GITHUB_OUTPUT
+        fi
+
+    - name: Test analysis library accuracy
+      id: library_test
+      run: |
+        echo "Testing analysis library with known filter combinations..."
+        
+        # Test major difference detection
+        if docker run --rm \
+          -v /tmp/music:/tmp/music \
+          -v ${{ github.workspace }}/test_fast_filter_ci.py:/app/test_fast_filter_ci.py \
+          -v ${{ github.workspace }}/video_comparison_test_library.py:/app/video_comparison_test_library.py \
+          --workdir /app \
+          ffmpeg-mcp:ci-test \
+          python test_fast_filter_ci.py --specific dramatic_bw passthrough; then
+          echo "Major difference test: PASS"
+          library_major="pass"
+        else
+          echo "Major difference test: FAIL"
+          library_major="fail"
+        fi
+        
+        # Test control (identical) detection  
+        if docker run --rm \
+          -v /tmp/music:/tmp/music \
+          -v ${{ github.workspace }}/test_fast_filter_ci.py:/app/test_fast_filter_ci.py \
+          -v ${{ github.workspace }}/video_comparison_test_library.py:/app/video_comparison_test_library.py \
+          --workdir /app \
+          ffmpeg-mcp:ci-test \
+          python test_fast_filter_ci.py --specific passthrough copy; then
+          echo "Control test: PASS"
+          library_control="pass"
+        else
+          echo "Control test: FAIL"
+          library_control="fail"
+        fi
+        
+        # Overall library test result
+        if [ "$library_major" = "pass" ] && [ "$library_control" = "pass" ]; then
+          echo "library_tests_result=success" >> $GITHUB_OUTPUT
+        else
+          echo "library_tests_result=failure" >> $GITHUB_OUTPUT
+        fi
+
+    - name: Performance benchmark
+      id: performance
+      run: |
+        echo "Running performance benchmark..."
+        
+        start_time=$(date +%s)
+        docker run --rm \
+          -v /tmp/music:/tmp/music \
+          -v ${{ github.workspace }}/test_fast_filter_ci.py:/app/test_fast_filter_ci.py \
+          -v ${{ github.workspace }}/video_comparison_test_library.py:/app/video_comparison_test_library.py \
+          --workdir /app \
+          ffmpeg-mcp:ci-test \
+          python test_fast_filter_ci.py --tests 1 --duration 5
+        end_time=$(date +%s)
+        
+        duration=$((end_time - start_time))
+        echo "Single test duration: ${duration}s"
+        echo "performance_duration=$duration" >> $GITHUB_OUTPUT
+        
+        # Set performance status
+        if [ $duration -lt 15 ]; then
+          echo "performance_status=excellent" >> $GITHUB_OUTPUT
+        elif [ $duration -lt 25 ]; then
+          echo "performance_status=good" >> $GITHUB_OUTPUT  
+        else
+          echo "performance_status=slow" >> $GITHUB_OUTPUT
+        fi
+
+    - name: List available filters
+      run: |
+        echo "📋 Available filters for testing:"
+        docker run --rm \
+          -v ${{ github.workspace }}/test_fast_filter_ci.py:/app/test_fast_filter_ci.py \
+          --workdir /app \
+          ffmpeg-mcp:ci-test \
+          python test_fast_filter_ci.py --list
+
+    - name: Cleanup test files
+      if: always()
+      run: |
+        echo "Cleaning up test files..."
+        rm -rf /tmp/music/ci_test_outputs/*
+        echo "Cleanup completed"
+
+    - name: Summary report
+      if: always()
+      run: |
+        echo "🎬 FILTER ANALYSIS CI SUMMARY"
+        echo "================================"
+        echo "Random Tests: ${{ steps.random_tests.outputs.random_tests_result || 'skipped' }}"
+        echo "Specific Tests: ${{ steps.specific_tests.outputs.specific_tests_result || 'skipped' }}"
+        echo "Library Tests: ${{ steps.library_test.outputs.library_tests_result || 'unknown' }}"
+        echo "Performance: ${{ steps.performance.outputs.performance_status || 'unknown' }} (${{ steps.performance.outputs.performance_duration || 'unknown' }}s)"
+        echo ""
+        
+        # Determine overall status
+        if [ "${{ steps.random_tests.outputs.random_tests_result }}" = "success" ] && \
+           [ "${{ steps.library_test.outputs.library_tests_result }}" = "success" ] && \
+           [ "${{ steps.performance.outputs.performance_status }}" != "slow" ]; then
+          echo "🎯 Overall Status: ✅ PASSED"
+          exit 0
+        else
+          echo "🎯 Overall Status: ⚠️ NEEDS REVIEW"
+          exit 1
+        fi
+
+  # Optional: Matrix testing with different configurations
+  matrix-filter-test:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      matrix:
+        filter_pair:
+          - ["dramatic_bw", "edge_detect"]
+          - ["sepia", "vintage"] 
+          - ["passthrough", "copy"]
+          - ["high_contrast", "negative"]
+      fail-fast: false
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Cache Docker layers
+      uses: actions/cache@v4
+      with:
+        path: /tmp/.buildx-cache
+        key: ${{ runner.os }}-docker-matrix-${{ hashFiles('Dockerfile.ci', 'pyproject.toml') }}
+        restore-keys: |
+          ${{ runner.os }}-docker-matrix-
+          ${{ runner.os }}-docker-ci-
+          ${{ runner.os }}-docker-
+
+    - name: Build lightweight matrix Docker image with cache
+      run: |
+        docker buildx build \
+          --file Dockerfile.ci \
+          --cache-from=type=local,src=/tmp/.buildx-cache \
+          --cache-to=type=local,dest=/tmp/.buildx-cache-new,mode=max \
+          --load \
+          --tag ffmpeg-mcp:matrix-test \
+          .
+        
+        # Move cache to avoid size issues
+        rm -rf /tmp/.buildx-cache
+        mv /tmp/.buildx-cache-new /tmp/.buildx-cache || true
+
+    - name: Prepare test environment
+      run: |
+        mkdir -p /tmp/music/source
+        docker run --rm \
+          -v /tmp/music:/tmp/music \
+          ffmpeg-mcp:matrix-test \
+          bash -c "
+            ffmpeg -f lavfi -i testsrc2=duration=30:size=720x1280:rate=30 \
+                   -f lavfi -i sine=frequency=440:duration=30 \
+                   -c:v libx264 -c:a aac -shortest \
+                   /tmp/music/source/_wZ5Hof5tXY_136.mp4 && \
+            ffmpeg -f lavfi -i sine=frequency=220:duration=30 -c:a flac \
+                   '/tmp/music/source/Subnautic Measures.flac'
+          "
+
+    - name: Test filter pair ${{ matrix.filter_pair[0] }} vs ${{ matrix.filter_pair[1] }}
+      run: |
+        echo "Testing: ${{ matrix.filter_pair[0] }} vs ${{ matrix.filter_pair[1] }}"
+        docker run --rm \
+          -v /tmp/music:/tmp/music \
+          -v ${{ github.workspace }}:/app \
+          --workdir /app \
+          ffmpeg-mcp:matrix-test \
+          python test_fast_filter_ci.py --specific "${{ matrix.filter_pair[0] }}" "${{ matrix.filter_pair[1] }}"

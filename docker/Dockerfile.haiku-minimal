@@ -1,0 +1,49 @@
+# HAIKU LLM Integration - Minimal Docker Image
+# Purpose: Fast builds for JSON komposition generation only
+# Build time: <2 minutes (vs 2+ hours for full stack)
+
+FROM python:3.13-slim
+
+# Essential environment variables only
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1
+
+# Install ONLY what Haiku integration needs
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    mediainfo \
+    ffmpeg \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install minimal Python dependencies for Haiku integration
+RUN pip install --no-cache-dir \
+    aiohttp \
+    pyyaml
+
+# Copy ONLY Haiku integration components
+COPY haiku-integration/ /app/haiku-integration/
+COPY src/server.py /app/server.py
+
+# Set working directory
+WORKDIR /app
+
+# Create minimal user
+RUN useradd -m -u 1000 haiku
+USER haiku
+
+# Health check for Haiku service
+HEALTHCHECK --interval=30s --timeout=5s --start-period=5s \
+    CMD curl -f http://localhost:8000/health || exit 1
+
+# Expose port for Haiku API
+EXPOSE 8000
+
+# Run Haiku integration server
+CMD ["python", "-m", "haiku-integration.cli-tools.haiku-komposition", "--api-mode"]
+
+# Metadata
+LABEL maintainer="Stig Lau" \
+      version="1.0.0-haiku-minimal" \
+      description="Haiku LLM Integration - Minimal Build" \
+      build-time="<2 minutes" \
+      size="<100MB"

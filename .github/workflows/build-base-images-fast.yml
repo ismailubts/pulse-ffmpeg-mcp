@@ -1,0 +1,161 @@
+# DEPRECATED: Docker base image approach abandoned
+# See docker/Dockerfile.base for explanation
+# 
+# PROBLEM: Building complex Alpine base defeats simplicity purpose
+# SOLUTION: Use direct single-stage Ubuntu builds instead
+#
+name: Build Base Docker Images (Fast) - DISABLED
+
+# DISABLED - Docker base approach abandoned
+# on:
+#   push:
+#     branches: [ main, feature/docker-build-optimization ]
+#     paths:
+#       - 'Dockerfile.base*'
+#       - 'pyproject.toml'
+#       - '.github/workflows/build-base-images-fast.yml'
+#   pull_request:
+#     branches: [ main ]
+#     paths:
+#       - 'Dockerfile.base*'
+#   workflow_dispatch:
+
+# Dummy event to keep workflow valid but never triggered
+on:
+  workflow_dispatch:
+    inputs:
+      deprecated:
+        description: 'This workflow is deprecated - use single-stage builds instead'
+        required: false
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository_owner }}/pulse-ffmpeg-mcp
+
+jobs:
+  # Test build time comparison
+  build-time-test:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    
+    strategy:
+      matrix:
+        dockerfile: 
+          - { file: "Dockerfile.base", tag: "base-alpine" }
+          - { file: "Dockerfile.base.optimized", tag: "base-alpine-minimal" }
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build performance test
+        run: |
+          echo "🏗️ Testing build performance for ${{ matrix.dockerfile.file }}"
+          start_time=$(date +%s)
+          
+          # Build only for linux/amd64 to test performance
+          docker buildx build \
+            --file ${{ matrix.dockerfile.file }} \
+            --platform linux/amd64 \
+            --tag test-${{ matrix.dockerfile.tag }} \
+            --cache-from type=gha,scope=${{ matrix.dockerfile.tag }} \
+            --cache-to type=gha,mode=max,scope=${{ matrix.dockerfile.tag }} \
+            --load \
+            .
+          
+          end_time=$(date +%s)
+          build_time=$((end_time - start_time))
+          echo "⏱️ Build time for ${{ matrix.dockerfile.tag }}: ${build_time} seconds"
+          
+          # Test the built image
+          echo "🧪 Testing image functionality..."
+          docker run --rm test-${{ matrix.dockerfile.tag }} \
+            sh -c "ffmpeg -version && python --version && python -c 'import psutil; print(\"Basic deps OK\")'"
+          
+          echo "build_time_${{ matrix.dockerfile.tag }}=${build_time}" >> $GITHUB_ENV
+
+      - name: Image size comparison
+        run: |
+          echo "📏 Image size comparison:"
+          docker images test-${{ matrix.dockerfile.tag }} --format "table {{.Repository}}:{{.Tag}}\t{{.Size}}"
+
+  # Production build (only on success)
+  build-production:
+    runs-on: ubuntu-latest
+    needs: build-time-test
+    if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=raw,value=base-optimized-latest
+            type=raw,value=base-optimized-{{sha}}
+
+      - name: Build and push optimized base image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile.base.optimized
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=base-alpine-minimal
+          cache-to: type=gha,mode=max,scope=base-alpine-minimal
+          # Only AMD64 for now - ARM64 can be added later if needed
+          platforms: linux/amd64
+
+      - name: Test production image
+        run: |
+          echo "🧪 Testing production image..."
+          docker run --rm ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:base-optimized-latest \
+            sh -c "ffmpeg -version && python --version && python -c 'import psutil; print(\"Minimal deps OK\")'"
+          echo "✅ Production base image test passed"
+
+  # Performance summary
+  performance-summary:
+    runs-on: ubuntu-latest
+    needs: build-time-test
+    if: always()
+    
+    steps:
+      - name: Performance Summary
+        run: |
+          echo "🚀 Docker Build Performance Summary"
+          echo "=================================="
+          echo "Alpine base build time: ${{ env.build_time_base-alpine || 'N/A' }} seconds"
+          echo "Alpine minimal build time: ${{ env.build_time_base-alpine-minimal || 'N/A' }} seconds"
+          echo ""
+          echo "🎯 Optimization goal: Reduce build time from 10+ minutes to under 5 minutes"
+          echo "📦 Strategy: Full Alpine vs Minimal Alpine (FFMPEG + Java + Python only)"

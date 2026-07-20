@@ -1,0 +1,42 @@
+[project]
+name = "pulse-ffmpeg-mcp"
+version = "0.1.0"
+description = "AI-powered MCP server for intelligent FFmpeg video processing and music video creation"
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [
+    { name = "ismailubts" }
+]
+maintainers = [
+    { name = "ismailubts" }
+]
+license = { text = "MIT" }
+keywords = ["mcp", "ffmpeg", "video", "ai", "music-video"]
+dependencies = [
+    "aiohttp>=3.12.15",
+    "docker>=7.1.0",
+    "fastmcp>=2.7.1",
+    "mcp>=1.9.3",
+    "opencv-python>=4.11.0.86",
+    "pydantic>=2.11.5",
+    "pymediainfo>=7.0.1",
+    "pytest>=8.4.0",
+    "pytest-asyncio>=1.0.0",
+    "pyyaml>=6.0.0",
+    "scenedetect>=0.6.6",
+    "jsonschema>=4.0.0",
+    "anthropic>=0.32.0",
+    "google-generativeai>=0.8.5",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.4.0",
+    "pytest-asyncio>=1.0.0",
+    "jsonschema>=4.0.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py", "*_test.py"]
+addopts = "--ignore=tests/ci"

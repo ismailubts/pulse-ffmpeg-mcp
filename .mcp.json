@@ -1,0 +1,7 @@
+ {
+    "mcpServers": {
+      "ffmpeg-mcp": {
+        "command": "uv", "args": ["run", "python", "-m", "src.server"], "cwd": "."
+      }
+    }
+  }

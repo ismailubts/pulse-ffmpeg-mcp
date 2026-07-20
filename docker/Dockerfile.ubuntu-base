@@ -1,0 +1,57 @@
+# FFMPEG MCP Server - Minimal Ubuntu Base
+# Purpose: Simple base with only essential dependencies for FFMPEG MCP Server
+# Build time: ~2 minutes (vs 6+ hours Alpine complexity)
+
+FROM ubuntu:22.04
+
+# Prevent interactive prompts during package installation
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Install only essential dependencies for FFMPEG MCP Server
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    # Python runtime (MCP Server)
+    python3 \
+    python3-pip \
+    python3-venv \
+    # Java for Komposteur integration
+    openjdk-21-jdk \
+    # FFmpeg for video processing
+    ffmpeg \
+    # Basic utilities
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Set Java environment
+ENV JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64
+
+# Set Python environment
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1
+
+# Create working directory
+WORKDIR /app
+
+# Create non-root user for security
+RUN useradd -m -u 1000 mcp && \
+    chown -R mcp:mcp /app
+
+# Create directories for FFMPEG processing
+RUN mkdir -p /tmp/music/{source,temp,metadata,screenshots,finished} && \
+    chown -R mcp:mcp /tmp/music
+
+# Labels
+LABEL maintainer="Stig Lau" \
+      version="1.0.0-ubuntu-minimal" \
+      description="FFMPEG MCP Server - Minimal Ubuntu Base" \
+      build-time="~2 minutes" \
+      dependencies="Python3 + Java21 + FFmpeg only"
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=5s --start-period=5s \
+    CMD python3 --version && java -version && ffmpeg -version || exit 1
+
+# Switch to non-root user
+USER mcp
+
+# Default command
+CMD ["python3", "--version"]

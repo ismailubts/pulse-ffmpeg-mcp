@@ -1,0 +1,47 @@
+#!/usr/bin/env python3
+"""
+Build Detective Command - Enhanced Version
+Usage: ./bd <repo> <pr_number>
+Example: ./bd StigLau/yolo-ffmpeg-mcp 21
+
+This replaces the old BD manual script with enhanced validation
+"""
+import sys
+import os
+
+# Add the scripts directory to Python path
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+from bd_with_validation import enhanced_bd_analysis
+
+def main():
+    if len(sys.argv) != 3:
+        print("Enhanced Build Detective - Usage:")
+        print("  ./bd <repo> <pr_number>")
+        print("  Example: ./bd StigLau/yolo-ffmpeg-mcp 21")
+        print("")
+        print("Features:")
+        print("  ✅ Standard BD analysis + enhanced time-based validation")
+        print("  ✅ IN_PROGRESS job detection (catches Alpine build waste)")
+        print("  ✅ Smart takeover protocol for critical issues")
+        print("  ✅ Cross-validation prevents false confidence")
+        sys.exit(1)
+    
+    repo = sys.argv[1] 
+    pr_number = sys.argv[2]
+    
+    print(f"🚀 Enhanced Build Detective Analysis: {repo} PR#{pr_number}")
+    print("=" * 70)
+    
+    result = enhanced_bd_analysis(repo, pr_number)
+    
+    # Return appropriate exit code based on result
+    if result['status'] == 'TAKEOVER_COMPLETED':
+        sys.exit(2)  # Critical issues requiring intervention
+    elif result['confidence'] < 7:
+        sys.exit(1)  # Warning level
+    else:
+        sys.exit(0)  # Success
+
+if __name__ == "__main__":
+    main()

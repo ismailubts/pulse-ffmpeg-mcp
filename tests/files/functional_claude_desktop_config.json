@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "ffmpeg-mcp": {
+      "command": "/path/to/pulse-ffmpeg-mcp/.venv/bin/python",
+      "args": ["-m", "src.server"],
+      "cwd": "/path/to/pulse-ffmpeg-mcp",
+      "env": {
+        "PYTHONPATH": "/path/to/pulse-ffmpeg-mcp"
+      }
+    }
+  }
+}
