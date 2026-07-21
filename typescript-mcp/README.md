@@ -243,4 +243,4 @@ This TypeScript MCP server is part of the larger PULSE FFMPEG ecosystem. See the
 
 ## License
 
-MIT - See main project license for details.
+Proprietary — see main project LICENSE for details.

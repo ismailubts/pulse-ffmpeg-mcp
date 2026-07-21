@@ -5,14 +5,21 @@
   "main": "dist/server.js",
   "type": "module",
   "scripts": {
-    "build": "tsc",
-    "dev": "tsc --watch",
-    "start": "node dist/server.js",
+    "build": "node init && tsc",
+    "dev": "node init && tsc --watch",
+    "start": "node init && node dist/server.js",
     "test": "echo \"No tests yet\" && exit 0"
   },
-  "keywords": ["mcp", "ffmpeg", "video", "processing", "haiku", "llm"],
-  "author": "ismailubts",
-  "license": "MIT",
+  "keywords": [
+    "mcp",
+    "ffmpeg",
+    "video",
+    "processing",
+    "haiku",
+    "llm"
+  ],
+  "author": "Abdul Ismail",
+  "license": "SEE LICENSE IN LICENSE",
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.0",
     "@anthropic-ai/sdk": "^0.27.0",

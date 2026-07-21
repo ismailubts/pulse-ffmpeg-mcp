@@ -5,12 +5,8 @@ description = "AI-powered MCP server for intelligent FFmpeg video processing and
 readme = "README.md"
 requires-python = ">=3.10"
 authors = [
-    { name = "ismailubts" }
+    { name = "Abdul Ismail" }
 ]
-maintainers = [
-    { name = "ismailubts" }
-]
-license = { text = "MIT" }
 keywords = ["mcp", "ffmpeg", "video", "ai", "music-video"]
 dependencies = [
     "aiohttp>=3.12.15",
