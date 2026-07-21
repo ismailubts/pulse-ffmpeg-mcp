@@ -11,8 +11,8 @@
     "test": "echo \"No tests yet\" && exit 0"
   },
   "keywords": ["mcp", "ffmpeg", "video", "processing", "haiku", "llm"],
-  "author": "ismailubts",
-  "license": "MIT",
+  "author": "Abdul Ismail",
+  "license": "SEE LICENSE IN LICENSE",
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.0",
     "@anthropic-ai/sdk": "^0.27.0",

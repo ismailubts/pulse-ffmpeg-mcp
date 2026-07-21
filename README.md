@@ -99,8 +99,8 @@ uv run python tests/test_basic_ci.py && echo "CI PASSED"
 
 ## Author
 
-**ismailubts**
+**Abdul Ismail**
 
 ## License
 
-MIT — see `LICENSE`.
+Proprietary — see `LICENSE`.

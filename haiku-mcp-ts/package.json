@@ -20,8 +20,8 @@
     "video",
     "cost-optimization"
   ],
-  "author": "ismailubts",
-  "license": "MIT",
+  "author": "Abdul Ismail",
+  "license": "SEE LICENSE IN LICENSE",
   "dependencies": {
     "@modelcontextprotocol/sdk": "^0.5.0",
     "@anthropic-ai/sdk": "^0.27.0",
